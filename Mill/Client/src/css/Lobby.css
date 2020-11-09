@@ -1,0 +1,25 @@
+.root {
+	-fx-background-image: url("../images/mill.png");
+    	-fx-background-repeat: stretch;   
+    	-fx-background-size: 600 600;
+    	-fx-background-position: center center;
+}
+
+.button {	
+	-fx-cursor: hand;
+	-fx-background-color: linear-gradient(#ffffb3, #00ffff);	
+}
+
+.style2btn {	
+	-fx-border-width: 1;
+	-fx-border-color: #000000;
+}
+
+#exitBtn {
+	-fx-background-color: #ff0000;
+	-fx-text-fill: #ffffff;
+}
+
+.table-column {
+  -fx-alignment: center;
+}
