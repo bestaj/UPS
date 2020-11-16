@@ -3,11 +3,9 @@
 #include <string.h>
 #include "client.h"
 
-// array for convert msg_id (= index in array) to appropriate event
-/*event events[] = {EV_LOGIN, EV_ROOMS, EV_FIND, EV_CREATE, EV_JOIN, EV_LOGOUT, EV_LEAVE, EV_TURN, EV_TAKE_STONE, EV_OPP_CON_OK, EV_OPP_TURN_REPLY,
-    EV_OPP_TAKE_STONE_REPLY, EV_OPP_LEAVE_OK, EV_OPP_LOST_CON_OK, EV_OPP_RECON_OK, EV_OPP_DISCON_OK, EV_UPDATE_ROOM_OK, EV_PING_OK
- };*/
-
+/* Array of all possible transitions
+  Used to validate message in the current state of the client
+*/
 state transitions[STATES_COUNT][EVENTS_COUNT] = {
   [ST_CONNECTED][EV_LOGIN] = ST_LOBBY,
   [ST_CONNECTED][EV_ROOMS] = ST_INVALID,
@@ -180,10 +178,12 @@ void print_state(state state) {
     printf("%s (%d)\n", state_str[state], state);
 }
 
+/* Make a transition and return a result state */
 int verify_transition(state state, int event_id) {
     return transitions[state][event_id];
 }
 
+/* Create a new client */
 client *create_client(char *address, int socket, int id) {
     client *new_client;
 
@@ -201,6 +201,7 @@ client *create_client(char *address, int socket, int id) {
     return new_client;
 }
 
+/* Clear the client */
 void remove_client(client *client) {
     if (client) free(client);
     client = NULL;

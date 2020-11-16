@@ -50,49 +50,56 @@ int send_message(int client_socket, int clear_buff);
 void disconnect_client(client *client, int remove);
 void inform_clients_in_lobby(int room_number, int change, char *nickname);
 
+/* Array of pointers to functions which process particular response from the client.
+  Response ID is index to the array.
+*/
 int (*process_func[]) (char *, client *) = {process_login, process_rooms, process_find, process_create, process_join, process_logout, process_leave, process_turn,
     process_take_stone, process_opp_con_ok, process_opp_turn_ok, process_opp_take_stone_ok, process_opp_leave_ok, process_opp_lost_con_ok, process_opp_recon_ok,
     process_opp_discon_ok, process_update_room_ok, process_ping_ok};
 
-fd_set read_fds;
-char recv_buff[BUFF_SIZE];
-char resp_buff[BUFF_SIZE];
+fd_set read_fds;  // Set of filedescriptors
+char recv_buff[BUFF_SIZE]; // Buffer for receiving messages from clients
+char resp_buff[BUFF_SIZE]; // Buffer for responses to clients
 client *clients[MAX_CLIENTS]; // Array of all connected clients
-client *discon_clients[MAX_CLIENTS];
-room *rooms[MAX_ROOMS];
+client *discon_clients[MAX_CLIENTS]; // Array of all disconnected clients waiting for possible reconnection
+room *rooms[MAX_ROOMS]; // Array of rooms
 struct sockaddr_in my_addr, remote_addr;
 int len_addr, clients_counter = 0, discon_clients_counter = 0, rooms_counter = 0;
 
+/* Validate a nickname of client */
 int test_nickname(char *nickname, client *player) {
+    if (!nickname || !player) return ERROR;
 
-    // test if nickname contains semicolon
+    // Test if nickname contains semicolon
     if (strchr(nickname, ';')) {
         sprintf(resp_buff, get_response(LOGIN_ERR_NICK_WITH_SEMICOLON));
         send_message(player->socket, TRUE);
         return ERROR;
     }
 
-    // test if nickname starts/ends with whitespace
+    // Test if nickname starts/ends with whitespace
     if (isspace(nickname[0]) || isspace(nickname[strlen(nickname) - 1])) {
         sprintf(resp_buff, get_response(LOGIN_ERR_NICK_WHITESPACE));
         send_message(player->socket, TRUE);
         return ERROR;
     }
 
-    // test if nickname is too long
+    // Test if nickname is too long
     if (strlen(nickname) > MAX_LEN_NICK) {
-      sprintf(resp_buff, get_response(LOGIN_ERR_NICK_TOO_LONG));
-      send_message(player->socket, TRUE);
-      return ERROR;
+        sprintf(resp_buff, get_response(LOGIN_ERR_NICK_TOO_LONG));
+        send_message(player->socket, TRUE);
+        return ERROR;
     }
     return NO_ERROR;
 }
 
+/* Process LOGIN request from the client.
+  Client wants to log in with a specific nickname.
+*/
 int process_login(char *params, client *player) {
     char *login_type, *nickname;
     int i;
 
-    printf("Processing LOGIN\n");
     if (!params || !player) return ERROR;
 
     // Get 1.parameter - NEW | EXIST and 2. parameter - nickname
@@ -101,20 +108,20 @@ int process_login(char *params, client *player) {
 
     // Log in a NEW client
     if (strncmp(login_type, "NEW", strlen(login_type)) == 0) {
-        if (test_nickname(nickname, player)) return NO_ERROR;
+        if (test_nickname(nickname, player)) return NO_ERROR; // Validate nickname
 
-        // test if nickname already exists
+        // Test if nickname already exists
         for (i = 0; i < MAX_CLIENTS; i++) {
-            if (i == player->id) continue;
+            if (i == player->id) continue; // Skip the same client
 
-            if (clients[i]) {
+            if (clients[i]) { // If there is some client on that position in array, then compare nicknames
                 if (strcmp(clients[i]->nickname, nickname) == 0) {
                     sprintf(resp_buff, get_response(LOGIN_ERR_NICK_EXIST), nickname);
                     if (send_message(player->socket, TRUE)) return ERROR;
                     return NO_ERROR;
                 }
             }
-            if (discon_clients[i]) {
+            if (discon_clients[i]) { // Go even through temporarily disconnected clients
                 if (strcmp(discon_clients[i]->nickname, nickname) == 0) {
                     sprintf(resp_buff, get_response(LOGIN_ERR_NICK_EXIST), nickname);
                     if (send_message(player->socket, TRUE)) return ERROR;
@@ -123,7 +130,7 @@ int process_login(char *params, client *player) {
             }
         }
 
-        // nickname is OK - save nickname to the client
+        // Nickname is OK - save nickname for the client
         strncpy(player->nickname, nickname, strlen(nickname));
         sprintf(resp_buff, get_response(LOGIN_NEW_OK));
         if (send_message(player->socket, TRUE)) return ERROR;
@@ -136,25 +143,26 @@ int process_login(char *params, client *player) {
           // doplnit
 
     }
-    // Invalid parameter
+    // Invalid 1. parameter (NEW or EXIST)
     else return ERROR;
 
     return NO_ERROR;
 }
 
+/* Process ROOMS request from the client.
+  Client wants to get a list of all rooms.
+*/
 int process_rooms(char *params, client *player) {
     int i;
 
-    printf("Processing ROOMS\n");
     if (params || !player) return ERROR; // message ROOMS has no params
 
-    // No rooms
-    if (rooms_counter == 0) {
+    if (rooms_counter == 0) { // If there is no created rooms
         sprintf(resp_buff, get_response(ROOMS_ERR));
         if (send_message(player->socket, TRUE)) return ERROR;
     }
     else {
-        for (i = 0; i < MAX_ROOMS; i++) {
+        for (i = 0; i < MAX_ROOMS; i++) { // Go through all rooms and send to client info about every single room
             if (!rooms[i]) continue;
 
             if (rooms[i]->room_state == FREE) {
@@ -171,15 +179,17 @@ int process_rooms(char *params, client *player) {
     return NO_ERROR;
 }
 
+/* Add the client into found free room */
 int join_into_found_room(room *room, client *player) {
     if (!room || !player) return ERROR;
 
+    // Set the room and client
     room->player2 = player;
     room->room_state = FULL;
     player->room_number = room->number;
     player->is_player1 = FALSE;
 
-    if (room->player1->state == ST_DISCONNECTED) {
+    if (room->player1->state == ST_DISCONNECTED) { // If opponent lost connection
         sprintf(resp_buff, get_response(FIND_OK_OPP_LOST_CON), room->number, room->player1->nickname);
         if (send_message(player->socket, TRUE)) return ERROR;
     }
@@ -195,17 +205,19 @@ int join_into_found_room(room *room, client *player) {
     return NO_ERROR;
 }
 
+/* Process FIND request from the client.
+  Client wants to join into any free room.
+*/
 int process_find(char *params, client *player) {
     int i;
 
-    printf("Processing FIND\n");
     if (params || !player) return ERROR; // message FIND has no params
 
-    for (i = 0; i < MAX_ROOMS; i++) {
+    for (i = 0; i < MAX_ROOMS; i++) { // Go through all rooms and finding some free room
         if (!rooms[i]) continue;
 
         if (rooms[i]->room_state == FREE) {
-            if (join_into_found_room(rooms[i], player)) return ERROR;
+            if (join_into_found_room(rooms[i], player)) return ERROR; // Add the client into the found room
             return NO_ERROR;
         }
     }
@@ -216,19 +228,21 @@ int process_find(char *params, client *player) {
     return NO_ERROR;
 }
 
+/* Process CREATE request from the client.
+  Client wants to create a new room.
+*/
 int process_create(char *params, client *player) {
     int i;
 
-    printf("Processing CREATE\n");
     if (params || !player) return ERROR; // message CREATE has no params
 
-    if (rooms_counter == MAX_ROOMS) {
+    if (rooms_counter == MAX_ROOMS) { // If maximum rooms was reached
         sprintf(resp_buff, get_response(CREATE_ERR));
         if (send_message(player->socket, TRUE)) return ERROR;
         return NO_ERROR;
     }
 
-    for (i = 0; i < MAX_ROOMS; i++) {
+    for (i = 0; i < MAX_ROOMS; i++) { // Finding a free place in array to create a room
         if (rooms[i] == NULL) {
             rooms[i] = create_room(i, player);
             player->room_number = i;
@@ -244,11 +258,13 @@ int process_create(char *params, client *player) {
     return NO_ERROR;
 }
 
+/* Process JOIN request from the client.
+  Client wants to join into the specific room.
+*/
 int process_join(char *params, client *player) {
-    int number;
+    int number; // Number of the room to join
     char *par, *rest;
 
-    printf("Processing JOIN\n");
     if (!params || !player) return ERROR;
 
     par = strtok(params, END_OF_LINE);
@@ -257,24 +273,28 @@ int process_join(char *params, client *player) {
     number = strtol(par, &rest, 10);
     if (*rest != '\0') return ERROR;
 
+    // Test if room number is invalid
     if (number < 0 || number > (MAX_ROOMS - 1)) {
         sprintf(resp_buff, get_response(JOIN_ERR_INV_NUM));
         if (send_message(player->socket, TRUE)) return ERROR;
         return NO_ERROR;
     }
 
+    // Test if the specific room exists
     if (rooms[number] == NULL) {
         sprintf(resp_buff, get_response(JOIN_ERR_INV_ROOM));
         if (send_message(player->socket, TRUE)) return ERROR;
         return NO_ERROR;
     }
 
+    // Test if the specific room is full
     if (rooms[number]->room_state == FULL) {
-        sprintf(resp_buff, get_response(JOIN_ERR_FULL_ROOM));
+        sprintf(resp_buff, get_response(JOIN_ERR_FULL_ROOM), number);
         if (send_message(player->socket, TRUE)) return ERROR;
         return NO_ERROR;
     }
 
+    // Join the client into the room
     rooms[number]->player2 = player;
     rooms[number]->room_state = FULL;
     player->room_number = number;
@@ -298,9 +318,10 @@ int process_join(char *params, client *player) {
     return NO_ERROR;
 }
 
+/* Process LOGOUT request from the client.
+  Client wants to log out from the server.
+*/
 int process_logout(char *params, client *player) {
-
-    printf("Processing LOGOUT\n");
     if (params || !player) return ERROR; // message LOGOUT has no params
 
     sprintf(resp_buff, get_response(LOGOUT_OK), player->nickname);
@@ -310,6 +331,7 @@ int process_logout(char *params, client *player) {
     return NO_ERROR;
 }
 
+/* Send to all clients which are in lobby info that some room was changed */
 void inform_clients_in_lobby(int room_number, int change, char *nickname) {
     int i;
 
@@ -333,6 +355,7 @@ void inform_clients_in_lobby(int room_number, int change, char *nickname) {
     }
 }
 
+/* Leave the room and remove it */
 void exit_room(client *player) {
     int number = player->room_number;
     remove_room(rooms[number]);
@@ -342,15 +365,17 @@ void exit_room(client *player) {
     inform_clients_in_lobby(number, CLR, NULL);
 }
 
+/* Process LEAVE request from the client.
+  Client wants to leave the room.
+*/
 int process_leave(char *params, client *player) {
     int number;
     client *opp;
 
-    printf("Processing LEAVE\n");
     if (params || !player) return ERROR; // message LEAVE has no params
 
     number = player->room_number;
-    // if in state WAITING_FOR_OPP
+    // Test if the client is in a state WAITING_FOR_OPP, then dont have to inform the opponent about leaving
     if (player->state == ST_WAITING_FOR_OPP) {
         exit_room(player);
     }
@@ -369,19 +394,21 @@ int process_leave(char *params, client *player) {
     return NO_ERROR;
 }
 
+/* Process TURN request from the client.
+  Client wants to set or shift the stone.
+*/
 int process_turn(char *params, client *player) {
     char *part, *rest, *rest2;
     client *opp;
     int pos1, pos2;
     response ret;
 
-    printf("Processing TURN\n");
     if (!params || !player) return ERROR;
 
     part = strtok_r(params, SEMICOLON, &rest);
     if (!part) return ERROR;
 
-    if (strcmp(part, "SET") == 0) {
+    if (strcmp(part, "SET") == 0) { // If client set the stone
         part = strtok(rest, END_OF_LINE);
         if (!part) return ERROR;
 
@@ -394,8 +421,8 @@ int process_turn(char *params, client *player) {
             if (send_message(player->socket, TRUE)) return ERROR;
             return NO_ERROR;
         }
-        ret = set_stone(rooms[player->room_number], player, pos1);
-
+        ret = set_stone(rooms[player->room_number], player, pos1); // Set the stone
+        // Evaluate the return value of setting the stone
         switch (ret) {
             case TURN_OK_MILL:
                 sprintf(resp_buff, get_response(TURN_OK_MILL));
@@ -434,7 +461,7 @@ int process_turn(char *params, client *player) {
                 break;
         }
     }
-    else if (strcmp(part, "SHIFT") == 0) {
+    else if (strcmp(part, "SHIFT") == 0) { // If client shift the stone
         part = strtok(rest, SEMICOLON);
         if (!part) return ERROR;
         pos1 = strtol(part, &rest2, 10);
@@ -458,8 +485,8 @@ int process_turn(char *params, client *player) {
             return NO_ERROR;
         }
 
-        ret = shift_stone(rooms[player->room_number], player, pos1, pos2);
-
+        ret = shift_stone(rooms[player->room_number], player, pos1, pos2); // Shift the stone
+        // Evaluate the return value of shifting the stone
         switch (ret) {
           case TURN_OK_MILL:
               sprintf(resp_buff, get_response(TURN_OK_MILL));
@@ -502,20 +529,19 @@ int process_turn(char *params, client *player) {
               break;
         }
     }
-    else {
-        printf("%s\n", part);
-        return ERROR;
-    }
+    else return ERROR;
 
     return NO_ERROR;
 }
 
+/* Process TAKE_STONE request from the client.
+  Client wants to take opponents stone.
+*/
 int process_take_stone(char *params, client *player) {
     char *rest;
     int pos, ret;
     client *opp;
 
-    printf("Processing TAKE_STONE\n");
     if (!params || !player) return ERROR;
 
     pos = strtol(params, &rest, 10);
@@ -527,8 +553,8 @@ int process_take_stone(char *params, client *player) {
         return NO_ERROR;
     }
 
-    ret = take_stone(rooms[player->room_number], player, pos);
-
+    ret = take_stone(rooms[player->room_number], player, pos); // Take stone
+    // Evaluate the return value of taking the stone
     switch (ret) {
         case TK_STONE_OK_CONT:
             sprintf(resp_buff, get_response(TK_STONE_OK_CONT));
@@ -562,19 +588,18 @@ int process_take_stone(char *params, client *player) {
     return NO_ERROR;
 }
 
-
+/* Process client response that his opponent was connected into the game. */
 int process_opp_con_ok(char *params, client *player) {
 
-    printf("Processing OPP_CON_OK\n");
     if (params || !player) return ERROR;
     player->state = ST_MY_TURN;
 
     return NO_ERROR;
 }
 
+/* Process client response that his opponent turned */
 int process_opp_turn_ok(char *params, client *player) {
 
-    printf("Processing OPP_TURN_OK\n");
     if (!params || !player) return ERROR;
 
     if (strcmp(params, "NOT_MILL") == 0)
@@ -589,9 +614,9 @@ int process_opp_turn_ok(char *params, client *player) {
     return NO_ERROR;
 }
 
+/* Process client response that his opponent took a stone */
 int process_opp_take_stone_ok(char *params, client *player) {
 
-    printf("Processing OPP_TAKE_STONE_OK\n");
     if (!params || !player) return ERROR;
 
     if (strcmp(params, "CONTINUE") == 0)
@@ -604,22 +629,20 @@ int process_opp_take_stone_ok(char *params, client *player) {
     return NO_ERROR;
 }
 
+/* Process client response that his opponent leaved the room */
 int process_opp_leave_ok(char *params, client *player) {
 
-    printf("Processing OPP_LEAVE_OK\n");
     if (params || !player) return ERROR;
     player->state = ST_LOBBY;
 
     return NO_ERROR;
 }
 
+/* Process client response that his opponent lost connection */
 int process_opp_lost_con_ok(char *params, client *player) {
 
-    printf("Processing OPP_LOST_CON_OK\n");
     if (params || !player) return ERROR;
-
-    if ((player->state == ST_MY_TURN) || (player->state == ST_TAKING_STONE))
-        player->state = ST_OPP_LOST_CON;
+    player->state = ST_OPP_LOST_CON;
 
     return NO_ERROR;
 }
@@ -637,8 +660,8 @@ int process_ping_ok(char *params, client *player) {
     return NO_ERROR;
 }
 
-/*
-param remove 0 - store the client for possible reconnection, 1 - remove client immedietly
+/* Disconnect the client or put him into the array of disconnected clients for possible reconnection.
+  param remove LATER - store the client for possible reconnection, NOW - remove client immedietly
 */
 void disconnect_client(client *client, int remove) {
     int i;
@@ -650,7 +673,7 @@ void disconnect_client(client *client, int remove) {
     clients[client->id] = NULL;
     if (remove == LATER) {
         for (int i = 0; i < MAX_CLIENTS; i++) {
-            if (!discon_clients[i]) {
+            if (!discon_clients[i]) { // Add client to the array for possible reconnection
                 discon_clients[i] = client;
                 discon_clients_counter++;
             }
@@ -662,6 +685,7 @@ void disconnect_client(client *client, int remove) {
     }
 }
 
+/* Send a message to the client */
 int send_message(int client_socket, int clear_buff) {
     if (client_socket < 0) return ERROR;
     if (send(client_socket, resp_buff, strlen(resp_buff), 0) <= 0) {
@@ -674,9 +698,7 @@ int send_message(int client_socket, int clear_buff) {
     return NO_ERROR;
 }
 
-/* Receive a message from the client
-   and store it into the buffer
-*/
+/* Receive a message from the client and store it into the buffer. */
 int read_message(client *client) {
     message *msg;
     int ret_value;
@@ -698,23 +720,18 @@ int read_message(client *client) {
          printf("Invalid event in the current state.\n");
         return ERROR;
     }
-  //  printf("State before: ");
-  //  print_state(client->state);
 
     // process message from the client
     if (process_func[msg->id](msg->params, client) == ERROR) {
         printf("Processing message failed.\n");
         return ERROR;
     }
-
-//    printf("State after: ");
-//    print_state(client->state);
-
     free_message(&msg);
 
     return NO_ERROR;
 }
 
+ /* Create server and accepting messages from the clients */
 int create_server(int port) {
     int par = 1;
     int i, sd, max_sd, bytes;
@@ -811,7 +828,7 @@ int create_server(int port) {
                 // Problems with client socket
                 else {
                     // nahle odpojeni - je treba uchovat udaje o klientovy pro pripadne znovu pripojeni
-                    disconnect_client(clients[i], NOW); // LATER
+                    disconnect_client(clients[i], NOW); // zmenit na LATER
                 }
             }
         }
