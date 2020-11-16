@@ -3,6 +3,7 @@
 #include <string.h>
 #include "message.h"
 
+/* All possible responses to clients */
 char *responses[] = {
     [UNKNOWN_MSG] = "UNKNOWN_MESSAGE;ERR;400\n",
 
@@ -75,7 +76,9 @@ char *responses[] = {
     [PING] = "PING;INFO;108\n"
 };
 
-// possible messages from the client
+/* Possible type of messages from the clients
+  Index to the array response to ID of the message
+*/
 char *list_of_messages[] = {
     "LOGIN", // 0
     "ROOMS", // 1
@@ -98,7 +101,7 @@ char *list_of_messages[] = {
     "UNKNOWN_MESSAGE" // 18
 };
 
-// if semicolon should be after message name, 1 = true, 0 = false
+// if semicolon should be after message name in message from the client, 1 = true, 0 = false
 short semicolon_after_msg_name[] = {
   1, // LOGIN
   0, // ROOOMS
@@ -116,16 +119,17 @@ short semicolon_after_msg_name[] = {
   0, // OPP_LOST_CON_OK
   0, // OPP_RECON_OK
   0, // OPP_DISCON_OK
-  0, // UPDATE_ROOM_OK
+  1, // UPDATE_ROOM_OK
   0, // PING_OK
   0  // UNKNOWN_MESSAGE
 };
 
-
+/* Return the particular response */
 char *get_response(response resp) {
     return responses[resp];
 }
 
+/* Process the received message from the client */
 message *parse_msg(char *data) {
     message *msg;
     char *part, *rest;
@@ -177,6 +181,7 @@ message *parse_msg(char *data) {
     return msg;
 }
 
+/* Clear the message */
 void free_message(message **msg) {
     if (!*msg) return;
 
