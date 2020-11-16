@@ -30,7 +30,7 @@
                   <Insets bottom="2.0" top="2.0" />
                </padding>
             </Label>
-            <TextField id="textF" fx:id="nicknameTF" alignment="CENTER" opacity="0.9" prefWidth="230.0" text="george">
+            <TextField id="textF" fx:id="nicknameTF" alignment="CENTER" opacity="0.9" prefWidth="230.0">
                <font>
                   <Font name="Arial Bold" size="20.0" />
                </font>
@@ -43,7 +43,7 @@
                   <Insets bottom="2.0" top="2.0" />
                </padding>
             </Label>
-            <TextField id="textF" fx:id="ipTF" alignment="CENTER" opacity="0.9" prefWidth="230.0" promptText="127.0.0.1" text="10.0.0.10">
+            <TextField id="textF" fx:id="ipTF" alignment="CENTER" opacity="0.9" prefWidth="230.0">
                <font>
                   <Font name="Arial Bold" size="20.0" />
                </font>
@@ -56,7 +56,7 @@
                   <Insets bottom="2.0" top="2.0" />
                </padding>
             </Label>
-            <TextField id="textF" fx:id="portTF" alignment="CENTER" opacity="0.9" prefWidth="230.0" promptText="54000" text="54000">
+            <TextField id="textF" fx:id="portTF" alignment="CENTER" opacity="0.9" prefWidth="230.0" promptText="0 - 65536">
                <font>
                   <Font name="Arial Bold" size="20.0" />
                </font>

@@ -11,6 +11,8 @@ public class Game {
 
     public GamePosition oldVisitedPosition = null;
     public GamePosition newVisitedPosition = null;
+    private GamePosition lastVisitedPosition = null;
+    private GamePosition pos = null;
 
     public int myUnusedStoneIndex = 8;
     public int opponentsUnusedStoneIndex = 8;
@@ -22,6 +24,8 @@ public class Game {
     private GamePosition selectedStone;
     private boolean isSelected = false; // If you have selected stone to shift
     public boolean takingStone = false;
+    public State returnedState;
+    public boolean paused = false;
     private GamePosition clickedPos;
     public boolean play = false; // If you play or your opponent
 
@@ -252,6 +256,9 @@ public class Game {
     }
 
     public void takeStone(boolean mystone, int posID) {
+        lastVisitedPosition = null;
+        takingStone = false;
+
         if (mystone) {
             gamePositions[posID].setPositionFree();
             myStoneCounter--;
@@ -268,43 +275,130 @@ public class Game {
                 Mill.getInstance().gameGUI.updateCanvas();
             });
         }
-        takingStone = false;
     }
 
     public void processMouseMove(MouseEvent event) {
-        GamePosition pos;
         if (takingStone) { // Taking the stone
             if ((pos = getOpponentsPosition(event)) != null) {
                 if (!testMill(pos, opponentsStone)) {
-                    updateVisitedPositions(pos);
+                    if (lastVisitedPosition != null) {
+                        return;
+                    }
+
+                    Platform.runLater(() -> {
+                        Mill.getInstance().gameGUI.markNewVisitedPosition(pos);
+                    });
+                    lastVisitedPosition = pos;
+                   // updateVisitedPositions(pos);
+                }
+            }
+            else {
+                if (lastVisitedPosition != null) {
+                    Platform.runLater(() -> {
+                        Mill.getInstance().gameGUI.clearLastVisitedPosition(lastVisitedPosition);
+                        lastVisitedPosition = null;
+                    });
+
                 }
             }
         }
         else {
             if (myUnusedStoneIndex >= 0) {  // Setting the stone
                 if ((pos = getFreePosition(event)) != null) {
-                    updateVisitedPositions(pos);
+                    if (lastVisitedPosition != null) {
+                        /*
+                        if (pos == lastVisitedPosition) { // Mouse move on the same position as before
+                            return;
+                        }
+
+                         */
+                        return;
+                    }
+
+                    Platform.runLater(() -> {
+                        Mill.getInstance().gameGUI.markNewVisitedPosition(pos);
+                    });
+                    lastVisitedPosition = pos;
+                        //updateVisitedPositions(pos);
+
+                }
+                else {
+                    if (lastVisitedPosition != null) {
+                        Platform.runLater(() -> {
+                            Mill.getInstance().gameGUI.clearLastVisitedPosition(lastVisitedPosition);
+                            lastVisitedPosition = null;
+                        });
+                    }
                 }
             }
             else {  // Shifting the stone
                 if (!isSelected) {
                     if ((pos = getMyPosition(event)) != null) {
                         if (isShiftPossible(pos)) {
-                            updateVisitedPositions(pos);
+                            if (lastVisitedPosition != null) {
+                                return;
+                            }
+                            Platform.runLater(() -> {
+                                Mill.getInstance().gameGUI.markNewVisitedPosition(pos);
+                            });
+                            lastVisitedPosition = pos;
+                          //  updateVisitedPositions(pos);
+                        }
+                    }
+                    else {
+                        if (lastVisitedPosition != null) {
+                            Platform.runLater(() -> {
+                                Mill.getInstance().gameGUI.clearLastVisitedPosition(lastVisitedPosition);
+                                lastVisitedPosition = null;
+                            });
+
                         }
                     }
                 }
                 else {
                     if ((pos = getFreePositionToShift(event)) != null) {
-                        updateVisitedPositions(pos);
+                        if (lastVisitedPosition != null) {
+                            return;
+                        }
+                        Platform.runLater(() -> {
+                            Mill.getInstance().gameGUI.markNewVisitedPosition(pos);
+                        });
+                        lastVisitedPosition = pos;
+                   //     updateVisitedPositions(pos);
                     }
                     else {
+                        /*
+                        if (lastVisitedPosition != null) {
+
+                            Platform.runLater(() -> {
+                                Mill.getInstance().gameGUI.clearLastVisitedPosition(lastVisitedPosition);
+                                lastVisitedPosition = null;
+                            });
+
+                        }
+*/
                         if ((pos = getMyPosition(event)) != null) {
                             if (pos == selectedStone) {
                                 return;
                             }
                             if (isShiftPossible(pos)) {
-                                updateVisitedPositions(pos);
+                                if (lastVisitedPosition != null) {
+                                    return;
+                                }
+                                Platform.runLater(() -> {
+                                    Mill.getInstance().gameGUI.markNewVisitedPosition(pos);
+                                });
+                                lastVisitedPosition = pos;
+                               // updateVisitedPositions(pos);
+                            }
+                        }
+                        else {
+                            if (lastVisitedPosition != null) {
+                                Platform.runLater(() -> {
+                                    Mill.getInstance().gameGUI.clearLastVisitedPosition(lastVisitedPosition);
+                                    lastVisitedPosition = null;
+                                });
+
                             }
                         }
                     }
@@ -312,7 +406,7 @@ public class Game {
             }
         }
     }
-
+/*
     private void updateVisitedPositions(GamePosition pos) {
         oldVisitedPosition = newVisitedPosition;
         newVisitedPosition = pos;
@@ -320,7 +414,7 @@ public class Game {
             Mill.getInstance().gameGUI.repaintVisitedPositions();
         });
     }
-
+*/
     public void processMouseClick(MouseEvent event) {
 
         if (Mill.getInstance().client.getState() == State.MY_TURN) {
@@ -343,15 +437,18 @@ public class Game {
                     }
                     else {
                         if ((clickedPos = getMyPosition(event)) != null) { // if clicked on my stone - change selected stone
-                            if (selectedStone == clickedPos)
+                            if (selectedStone == clickedPos) {
                                 return; // Selected the same stone as before
+                            }
                             if (!isShiftPossible(clickedPos)) {
                                 return;
                             }
+                            lastVisitedPosition = null;
                             Platform.runLater(() -> {
                                 Mill.getInstance().gameGUI.updateSelectedStone(selectedStone, clickedPos);
+                                selectedStone = clickedPos;
                             });
-                            selectedStone = clickedPos;
+
                         }
                     }
                 }
@@ -361,7 +458,8 @@ public class Game {
                             return;
                         }
                         selectedStone = clickedPos;
-                        newVisitedPosition = null;
+                        lastVisitedPosition = null;
+                     //   newVisitedPosition = null;
                         isSelected = true;
                         Platform.runLater(() -> {
                                 Mill.getInstance().gameGUI.updateSelectedStone(null, selectedStone);

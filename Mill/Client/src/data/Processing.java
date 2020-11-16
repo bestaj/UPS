@@ -45,6 +45,9 @@ public class Processing {
     }
 
     private int processLoginReply(Message msg) {
+        String[] params2;
+        int roomNumber;
+
         if (msg.state.equals("OK")) { // log in OK - new client
             if (msg.stateID == 0) {
                 if (msg.params != null) {
@@ -54,6 +57,36 @@ public class Processing {
                 Mill.getInstance().client.setState(State.LOBBY);
             }
             else if (msg.stateID == 1) { // log in OK - existing client
+                if (msg.params == null) {
+                    return ERROR;
+                }
+
+                if (msg.params.equals("LOBBY")) {
+                    Mill.getInstance().client.setState(State.LOBBY);
+                    Mill.getInstance().changeScene(Mill.lobbyScene);
+                }
+                else {
+                    String[] params = msg.params.split(";", 2);
+                    if (params.length < 2) {
+                        return ERROR;
+                    }
+
+                    if (params[0].equals("WAITING_FOR_OPP")) {
+                        params2 = params[1].split(";", 2);
+                        if (params2.length < 2) {
+                            return ERROR;
+                        }
+
+                        try {
+                            roomNumber = Integer.parseInt(params2[0]);
+                        }
+                        catch (Exception e) {
+                            return ERROR;
+                        }
+
+                        
+                    }
+                }
 
             }
             else { // message state is wrong
@@ -234,7 +267,7 @@ public class Processing {
                     Mill.getInstance().changeScene(Mill.gameScene);
                     if (params[2].equals("OPP_LOST_CON")) {
                         Platform.runLater(() -> {
-                            Mill.getInstance().gameGUI.setInfoPlayerLostConnection(true);
+                            Mill.getInstance().gameGUI.setInfoPlayerLostConnection();
                         });
                     }
                     Mill.getInstance().game.startGame(false);
@@ -281,12 +314,13 @@ public class Processing {
                     System.out.println("Room number cannot convert to number.");
                     return ERROR;
                 }
-
-                Mill.getInstance().lobbyGUI.addRoom(false, roomNumber, Mill.getInstance().client.getNickname(), null);
-                Mill.getInstance().selectedRoom = Mill.getInstance().lobbyGUI.getRoom(roomNumber);
-                Mill.getInstance().game = new Game();
-                Mill.getInstance().changeScene(Mill.gameScene);
-                Mill.getInstance().game.startGame(true);
+                Platform.runLater(() -> {
+                    Mill.getInstance().lobbyGUI.addRoom(false, roomNumber, Mill.getInstance().client.getNickname(), null);
+                    Mill.getInstance().selectedRoom = Mill.getInstance().lobbyGUI.getRoom(roomNumber);
+                    Mill.getInstance().game = new Game();
+                    Mill.getInstance().changeScene(Mill.gameScene);
+                    Mill.getInstance().game.startGame(true);
+                });
             }
             else {
                 return ERROR;
@@ -352,7 +386,7 @@ public class Processing {
                     Mill.getInstance().changeScene(Mill.gameScene);
                     if (params[2].equals("OPP_LOST_CON")) {
                         Platform.runLater(() -> {
-                            Mill.getInstance().gameGUI.setInfoPlayerLostConnection(true);
+                            Mill.getInstance().gameGUI.setInfoPlayerLostConnection();
                         });
                     }
                     Mill.getInstance().game.startGame(false);
@@ -434,6 +468,10 @@ public class Processing {
         }
         if (msg.state.equals("OK")) {
             if (msg.stateID == 0) {
+                Platform.runLater(() -> {
+                    Mill.getInstance().lobbyGUI.removeRoom(Mill.getInstance().selectedRoom.getNumber());
+                    Mill.getInstance().selectedRoom = null;
+                });
                 Mill.getInstance().game = null;
                 Mill.getInstance().client.setState(State.LOBBY);
                 Mill.getInstance().changeScene(Mill.lobbyScene);
@@ -666,7 +704,6 @@ public class Processing {
     }
 
     public int processOpponentTurned(Message msg) {
-        String action;
         String[] params;
         String[] params2;
         int posID, pos1ID, pos2ID;
@@ -856,37 +893,186 @@ public class Processing {
     }
 
     public int processOpponentLeaved(Message msg) {
+        if (msg.params != null) {
+            return ERROR;
+        }
 
-        return 0;
+        if (msg.state.equals("INFO")) {
+            if (msg.stateID == 103) {
+                Mill.getInstance().game.play = false;
+
+                Platform.runLater(() -> {
+                    Mill.getInstance().gameGUI.opponentLeaved();
+                    Mill.getInstance().lobbyGUI.removeRoom(Mill.getInstance().selectedRoom.getNumber());
+                    Mill.getInstance().selectedRoom = null;
+                    Mill.getInstance().game = null;
+                });
+                Mill.getInstance().client.setState(State.LOBBY);
+                Mill.getInstance().client.sendMsg(Message.getMessage(Response.OPP_LEAVE));
+
+            }
+            else {
+                return ERROR;
+            }
+        }
+        else {
+            return ERROR;
+        }
+        return NO_ERROR;
     }
 
     public int processOpponentLostConnection(Message msg) {
+        if (msg.params != null) {
+            return ERROR;
+        }
 
-        return 0;
+        if (msg.state.equals("INFO")) {
+            if (msg.stateID == 104) {
+                Mill.getInstance().game.returnedState = Mill.getInstance().client.getState();
+                Mill.getInstance().client.setState(State.OPP_LOST_CON);
+                Platform.runLater(() -> {
+                   Mill.getInstance().gameGUI.opponentLostConnection();
+                });
+                Mill.getInstance().client.sendMsg(Message.getMessage(Response.OPP_LOST_CON));
+            }
+            else {
+                return ERROR;
+            }
+        }
+        else {
+            return ERROR;
+        }
+        return NO_ERROR;
     }
 
     public int processOpponentReconnection(Message msg) {
+        if (msg.params != null) {
+            return ERROR;
+        }
 
-        return 0;
+        if (msg.state.equals("INFO")) {
+            if (msg.stateID == 105) {
+                Platform.runLater(() -> {
+                    Mill.getInstance().gameGUI.opponentReconnect();
+                });
+                Mill.getInstance().client.sendMsg(Message.getMessage(Response.OPP_RECON));
+            }
+            else {
+                return ERROR;
+            }
+        }
+        else {
+            return ERROR;
+        }
+        return NO_ERROR;
     }
 
     public int processOpponentDisconnection(Message msg) {
+        if (msg.params != null) {
+            return ERROR;
+        }
 
-        return 0;
+        if (msg.state.equals("INFO")) {
+            if (msg.stateID == 106) {
+
+                Platform.runLater(() -> {
+                    Mill.getInstance().gameGUI.opponentDisconnected();
+                    Mill.getInstance().lobbyGUI.removeRoom(Mill.getInstance().selectedRoom.getNumber());
+                    Mill.getInstance().selectedRoom = null;
+                    Mill.getInstance().game = null;
+                });
+                Mill.getInstance().client.setState(State.LOBBY);
+                Mill.getInstance().client.sendMsg(Message.getMessage(Response.OPP_DISCON));
+
+            }
+            else {
+                return ERROR;
+            }
+        }
+        else {
+            return ERROR;
+        }
+        return NO_ERROR;
     }
 
     public int processUpdateRoom(Message msg) {
+        int roomNumber;
+        if (msg.params == null) {
+            return ERROR;
+        }
+        if (msg.state.equals("INFO")) {
+            if (msg.stateID == 107) {
+                String[] params = msg.params.split(";", 3);
+                if (params.length < 2) {
+                    return ERROR;
+                }
 
-        return 0;
+                try {
+                    roomNumber = Integer.parseInt(params[0]);
+                }
+                catch (Exception e) {
+                    return ERROR;
+                }
+
+                if (params[1].equals("CLR")) {
+                    if (params.length > 2) {
+                        return ERROR;
+                    }
+                    Platform.runLater(() -> {
+                        Mill.getInstance().lobbyGUI.removeRoom(roomNumber);
+                    });
+                }
+                else {
+                    if (params.length < 3) {
+                        return ERROR;
+                    }
+                    if (params[1].equals("ADD")) {
+                        Platform.runLater(() -> {
+                            Mill.getInstance().lobbyGUI.addRoom(false, roomNumber, params[2], null);
+                        });
+                    }
+                    else if (params[1].equals("UPDATE")) {
+                        Platform.runLater(() -> {
+                            Mill.getInstance().lobbyGUI.addPlayerIntoRoom(roomNumber, params[2]);
+                        });
+                    }
+                    else {
+                        return ERROR;
+                    }
+                }
+            }
+            else {
+                return ERROR;
+            }
+        }
+        else {
+            return ERROR;
+        }
+        Mill.getInstance().client.sendMsg(String.format(Message.getMessage(Response.UPDATE_ROOM), roomNumber));
+
+        return NO_ERROR;
     }
 
     public int processPing(Message msg) {
 
-        return 0;
+        return NO_ERROR;
     }
 
     public int processUnknownMessage(Message msg) {
-
-        return 0;
+        if (msg.state.equals("ERR")) {
+            if (msg.stateID == 400) {
+                Mill.getInstance().client.closeConnection();
+                Platform.runLater(() -> {
+                    Mill.getInstance().lobbyGUI.setInfoLbl("Communication with the server failed.");
+                });
+            }
+            else {
+                return ERROR;
+            }
+        }
+        else {
+            return ERROR;
+        }
+        return NO_ERROR;
     }
 }
