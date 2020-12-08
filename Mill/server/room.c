@@ -48,6 +48,8 @@ int nbrs_23[] = {15, 16, 22};
 int *neighbours[] = {nbrs_0, nbrs_1, nbrs_2, nbrs_3, nbrs_4, nbrs_5, nbrs_6, nbrs_7, nbrs_8, nbrs_9, nbrs_10, nbrs_11,
                      nbrs_12, nbrs_13, nbrs_14, nbrs_15, nbrs_16, nbrs_17, nbrs_18, nbrs_19, nbrs_20, nbrs_21, nbrs_22, nbrs_23};
 
+int nbrs_counts[] = {2, 3, 2, 3, 2, 3, 2, 3, 2, 4, 2, 4, 2, 4, 2, 4, 2, 3, 2, 3, 2, 3, 2, 3};
+
 /* Create a room (game) */
 room *create_room(int number, client *player1) {
     room *new_room;
@@ -170,8 +172,30 @@ int is_mill(int *game_positions, int pos_id, int player_stone) {
     return FALSE;
 }
 
+
+int exist_any_possible_opp_move(int *game_positions, client *player) {
+    int i, j, opponent;
+    if (player->is_player1) {
+        opponent = P2;
+    }
+    else {
+        opponent = P1;
+    }
+
+    for (i = 0; i < POSITIONS_COUNT; i++) {
+        if (game_positions[i] == opponent) {
+            for (j = 0; j < nbrs_counts[i]; j++) {
+                if (game_positions[neighbours[i][j]] == FREE) {
+                    return TRUE;
+                }
+            }
+        }
+    }
+    return FALSE;
+}
+
 /* Test if client can take some opponents stone which is not inside mill */
-int isTakeStonePossible(int *game_positions, client *player) {
+int exist_any_opp_stone_not_in_mill(int *game_positions, client *player) {
     int i, opponent;
 
     if (player->is_player1) {
@@ -211,11 +235,11 @@ response set_stone(room *room, client *player, int pos_id) {
         room->game_positions[pos_id] = P1;
         room->p1_unset_stones--;
         if (is_mill(room->game_positions, pos_id, P1) == TRUE) {
-            if (isTakeStonePossible(room->game_positions, player)) {
+            if (exist_any_opp_stone_not_in_mill(room->game_positions, player)) {
                 return TURN_OK_MILL;
             }
             else {
-                return TURN_OK_MILL_NO_TAKE;
+                return TURN_OK_MILL_TAKE_ANY_STONE;
             }
         }
     }
@@ -223,35 +247,32 @@ response set_stone(room *room, client *player, int pos_id) {
         room->game_positions[pos_id] = P2;
         room->p2_unset_stones--;
         if (is_mill(room->game_positions, pos_id, P2) == TRUE) {
-            if (isTakeStonePossible(room->game_positions, player)) {
+            if (exist_any_opp_stone_not_in_mill(room->game_positions, player)) {
                 return TURN_OK_MILL;
             }
             else {
-                return TURN_OK_MILL_NO_TAKE;
+                return TURN_OK_MILL_TAKE_ANY_STONE;
+            }
+        }
+        if (room->p2_unset_stones == 0) { // Player 2 set the last stone -> test if he already win
+            if (!exist_any_possible_opp_move(room->game_positions, player)) {
+                return TURN_OK_NOT_MILL_WIN;
             }
         }
     }
 
-    return TURN_OK_NOT_MILL;
+    return TURN_OK_NOT_MILL_CONT;
 }
 
 /* Test if position 2 is valid neighbour of position 1 */
-int exist_free_neighbour(room *room, int pos1_id, int pos2_id) {
+int valid_position2(room *room, int pos1_id, int pos2_id) {
     int i, nbrs_count;
 
-    if (room->game_positions[pos2_id] != FREE) {
+    if (room->game_positions[pos2_id] != FREE) { // If position 2 is full, then cannot shift the stone
         return FALSE;
     }
 
-    if (pos1_id % 2 == 0) {
-        nbrs_count = 2;
-    }
-    else {
-        if (pos1_id > 7 && pos1_id < 16)
-            nbrs_count = 4;
-        else
-            nbrs_count = 3;
-    }
+    nbrs_count = nbrs_counts[pos1_id];
 
     for (i = 0; i < nbrs_count; i++) {
         if (neighbours[pos1_id][i] == pos2_id) {
@@ -278,7 +299,7 @@ response shift_stone(room *room, client *player, int pos1_id, int pos2_id) {
             return TURN_ERR_MISSING_STONE;
     }
 
-    if (exist_free_neighbour(room, pos1_id, pos2_id) == FALSE) {
+    if (valid_position2(room, pos1_id, pos2_id) == FALSE) {
         return TURN_ERR_WRONG_POS2; // Position 2 is not next to position 1
     }
 
@@ -287,27 +308,37 @@ response shift_stone(room *room, client *player, int pos1_id, int pos2_id) {
     if (player->is_player1) {
         room->game_positions[pos2_id] = P1;
         if (is_mill(room->game_positions, pos2_id, P1) == TRUE) {
-            if (isTakeStonePossible(room->game_positions, player)) {
+            if (exist_any_opp_stone_not_in_mill(room->game_positions, player)) {
                 return TURN_OK_MILL;
             }
             else {
-                return TURN_OK_MILL_NO_TAKE;
+                return TURN_OK_MILL_TAKE_ANY_STONE;
+            }
+        }
+        else {
+            if (!exist_any_possible_opp_move(room->game_positions, player)) {
+                return TURN_OK_NOT_MILL_WIN;
             }
         }
     }
     else {
         room->game_positions[pos2_id] = P2;
         if (is_mill(room->game_positions, pos2_id, P2) == TRUE) {
-            if (isTakeStonePossible(room->game_positions, player)) {
+            if (exist_any_opp_stone_not_in_mill(room->game_positions, player)) {
                 return TURN_OK_MILL;
             }
             else {
-                return TURN_OK_MILL_NO_TAKE;
+                return TURN_OK_MILL_TAKE_ANY_STONE;
+            }
+        }
+        else {
+            if (!exist_any_possible_opp_move(room->game_positions, player)) {
+                return TURN_OK_NOT_MILL_WIN;
             }
         }
     }
 
-    return TURN_OK_NOT_MILL;
+    return TURN_OK_NOT_MILL_CONT;
 }
 
 /* Take the opponents stone from the particular game position */
@@ -317,25 +348,38 @@ response take_stone(room *room, client *player, int pos_id) {
         if (room->game_positions[pos_id] != P2) {
             return TK_STONE_ERR_MISSING_STONE; // On the position is not opponents stone
         }
-        if (is_mill(room->game_positions, pos_id, P2) == TRUE) {
-            return TK_STONE_ERR_IN_MILL; // The stone on the specific position is inside a mill
+        if (exist_any_opp_stone_not_in_mill(room->game_positions, player)) {
+            if (is_mill(room->game_positions, pos_id, P2) == TRUE) {
+                return TK_STONE_ERR_IN_MILL; // The stone on the specific position is inside a mill
+            }
         }
+
         room->p2_stones--;
         room->game_positions[pos_id] = FREE;
-        if (room->p2_stones < 3)
+        if (room->p2_stones < 3) {
             return TK_STONE_OK_WIN; // Game over - opponent has less than 3 stones
+        }
+        if (!exist_any_possible_opp_move(room->game_positions, player)) {
+            return TK_STONE_OK_WIN;
+        }
     }
     else {
         if (room->game_positions[pos_id] != P1) {
             return TK_STONE_ERR_MISSING_STONE;
         }
-        if (is_mill(room->game_positions, pos_id, P1) == TRUE) {
-            return TK_STONE_ERR_IN_MILL;
+        if (exist_any_opp_stone_not_in_mill(room->game_positions, player)) {
+            if (is_mill(room->game_positions, pos_id, P1) == TRUE) {
+                return TK_STONE_ERR_IN_MILL; // The stone on the specific position is inside a mill
+            }
         }
         room->p1_stones--;
         room->game_positions[pos_id] = FREE;
-        if (room->p1_stones < 3)
+        if (room->p1_stones < 3) {
             return TK_STONE_OK_WIN;
+        }
+        if (!exist_any_possible_opp_move(room->game_positions, player)) {
+            return TK_STONE_OK_WIN;
+        }
     }
 
     return TK_STONE_OK_CONT;
