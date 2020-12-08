@@ -162,8 +162,59 @@ public class GameController implements Initializable {
         Optional<ButtonType> result = alert.showAndWait();
 
         if (result.get() == btn1){
+            game.play = false;
             Mill.getInstance().client.sendMsg(Message.getMessage(Response.LEAVE));
         }
+    }
+
+    public void opponentLeaved() {
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.setTitle("GAME OVER");
+        alert.setHeaderText("Your opponent leaved this room.");
+        alert.initOwner(Mill.getInstance().window);
+        alert.showAndWait();
+        Mill.getInstance().changeScene(Mill.lobbyScene);
+    }
+
+    public void opponentLostConnection() {
+        if (game.play) {
+            game.play = false;
+            game.paused = true;
+        }
+        setInfoPlayerLostConnection();
+    }
+
+    public void opponentReconnect() {
+        setInfoText("Your opponent is connected again.");
+        if (Mill.getInstance().client.isPlayer1()) {
+            stateLblP2.setText("(Playing)");
+            if (game.paused) {
+                stateLblP1.setVisible(true);
+                stateLblP2.setVisible(false);
+            }
+        }
+        else {
+            stateLblP1.setText("(Playing)");
+            if (game.paused) {
+                stateLblP2.setVisible(true);
+                stateLblP1.setVisible(false);
+            }
+        }
+
+        Mill.getInstance().client.setState(game.returnedState);
+        if (game.paused) {
+            game.play = true;
+            game.paused = false;
+        }
+    }
+
+    public void opponentDisconnected() {
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.setTitle("GAME OVER");
+        alert.setHeaderText("Your opponent was disconnected.");
+        alert.initOwner(Mill.getInstance().window);
+        alert.showAndWait();
+        Mill.getInstance().changeScene(Mill.lobbyScene);
     }
 
     public void gameOver(boolean winner) {
@@ -186,6 +237,8 @@ public class GameController implements Initializable {
         }
     }
 
+
+/*
     public void repaintVisitedPositions() {
         GamePosition oldPos = game.oldVisitedPosition;
         GamePosition newPos = game.newVisitedPosition;
@@ -209,6 +262,29 @@ public class GameController implements Initializable {
         }
         else {
             strokeCircle(newPos.getLeftUpperCornerX() +1, newPos.getLeftUpperCornerY() + 1, STONE_SIZE - 2, green);
+        }
+    }
+*/
+    public void markNewVisitedPosition(GamePosition newPos) {
+        if (newPos.isFree()) {
+            strokeCircle(newPos.getLeftUpperCornerX() + 1, newPos.getLeftUpperCornerY() + 1, POS_SIZE - 2, green);
+        }
+        else {
+            strokeCircle(newPos.getLeftUpperCornerX() +1, newPos.getLeftUpperCornerY() + 1, STONE_SIZE - 2, green);
+        }
+    }
+
+    public void clearLastVisitedPosition(GamePosition lastPos) {
+        if (lastPos.isFree()) {
+            fillCircle(lastPos.getLeftUpperCornerX(), lastPos.getLeftUpperCornerY(), POS_SIZE, Color.BLACK);
+        }
+        else {
+            if (lastPos.getStone().equals(Stone.RED)) {
+                fillCircle(lastPos.getLeftUpperCornerX(), lastPos.getLeftUpperCornerY(), STONE_SIZE, red);
+            }
+            else {
+                fillCircle(lastPos.getLeftUpperCornerX(), lastPos.getLeftUpperCornerY(), STONE_SIZE, blue);
+            }
         }
     }
 
@@ -252,17 +328,17 @@ public class GameController implements Initializable {
         }
     }
 
-    public void setInfoPlayerLostConnection(boolean player1) {
+    public void setInfoPlayerLostConnection() {
         setInfoText("Your opponent lost connection.");
-        if (player1) {
-            stateLblP1.setText("Reconnecting...");
-            stateLblP1.setVisible(true);
-            stateLblP2.setVisible(false);
-        }
-        else {
-            stateLblP2.setText("Reconnecting...");
+        if (Mill.getInstance().client.isPlayer1()) {
+            stateLblP2.setText("(Reconnecting...)");
             stateLblP2.setVisible(true);
             stateLblP1.setVisible(false);
+        }
+        else {
+            stateLblP1.setText("(Reconnecting...)");
+            stateLblP1.setVisible(true);
+            stateLblP2.setVisible(false);
         }
     }
 

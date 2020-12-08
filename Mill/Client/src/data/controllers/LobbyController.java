@@ -67,7 +67,32 @@ public class LobbyController implements Initializable {
         }
         rooms.add(newRoom);
         table.refresh();
-        table.sort();
+    }
+
+    public void removeRoom(int roomNumber) {
+        for (Room r: rooms) {
+            if (r.getNumber() == roomNumber) {
+                if (Mill.getInstance().selectedRoom != null && (Mill.getInstance().selectedRoom.getNumber() == roomNumber)) {
+                    Mill.getInstance().selectedRoom = null;
+                    selectedRoomLbl.setText("No selected room.");
+                    disableJoinButton(true);
+                }
+                rooms.remove(r);
+                table.refresh();
+                break;
+            }
+        }
+
+    }
+
+    public void addPlayerIntoRoom(int roomNumber, String player2) {
+        for (Room r: rooms) {
+            if (r.getNumber() == roomNumber) {
+                r.setPlayer2(player2);
+                table.refresh();
+                break;
+            }
+        }
     }
 
     public Room getRoom(int roomNumber) {

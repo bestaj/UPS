@@ -1,0 +1,25 @@
+.player1background {
+	-fx-background-color: #ffcccc;
+}
+
+.player2background {
+	-fx-background-color: #cce0ff;
+}
+
+.roomBackground {
+	-fx-background-color: linear-gradient(to right, #ffcccc, #cce0ff);
+}
+
+.middleBackground {
+    	-fx-background-color: rgba(200, 200, 200, 1);
+}
+
+.button {
+	-fx-cursor: hand;
+    	-fx-background-color: #ff0000;
+	-fx-text-fill: #ffffff;
+}
+
+.text-area .content {
+    -fx-cursor: DEFAULT;
+}
