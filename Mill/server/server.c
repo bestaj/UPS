@@ -10,14 +10,14 @@
 #include <arpa/inet.h>
 #include <ctype.h>
 #include <pthread.h>
+#include <signal.h>
 #include "client.h"
 #include "message.h"
 #include "room.h"
 
-#define MAX_CLIENTS 2
-#define MAX_ROOMS 32
-#define BUFF_SIZE 128
+#define BUFF_SIZE 256 // size of buffers
 #define MAX_FUNCS 20
+#define MAX_PING_ATTEMPTS 10
 
 #define CLR 0
 #define ADD 1
@@ -28,6 +28,10 @@
 #define ERROR -1
 #define NO_ERROR 0
 
+int MAX_CLIENTS; // maximum number of clients
+int MAX_ROOMS; // maximum number of rooms
+
+int process_connect_ok(char *params, client *player);
 int process_login(char *params, client *player);
 int process_rooms(char *params, client *player);
 int process_find(char *params, client *player);
@@ -46,7 +50,6 @@ int process_opp_recon_ok(char *params, client *player);
 int process_opp_discon_ok(char *params, client *player);
 int process_update_room_ok(char *params, client *player);
 int process_ping_ok(char *params, client *player);
-int process_init_ok(char *params, client *player);
 
 int send_message(int client_socket, int clear_buff);
 void disconnect_client(client *client, int remove);
@@ -55,17 +58,19 @@ void inform_clients_in_lobby(int room_number, int change, char *nickname);
 /* Array of pointers to functions which process particular response from the client.
   Response ID is index to the array.
 */
-int (*process_func[]) (char *, client *) = {process_login, process_rooms, process_find, process_create, process_join, process_logout, process_leave, process_turn,
+int (*process_func[]) (char *, client *) = {process_connect_ok, process_login, process_rooms, process_find, process_create, process_join, process_logout, process_leave, process_turn,
     process_take_stone, process_opp_con_ok, process_opp_turn_ok, process_opp_take_stone_ok, process_opp_leave_ok, process_opp_lost_con_ok, process_opp_recon_ok,
-    process_opp_discon_ok, process_update_room_ok, process_ping_ok, process_init_ok};
+    process_opp_discon_ok, process_update_room_ok, process_ping_ok};
 
 fd_set read_fds;  // Set of filedescriptors
 char recv_buff[BUFF_SIZE]; // Buffer for receiving messages from clients
 char resp_buff[BUFF_SIZE]; // Buffer for responses to clients
-client *clients[MAX_CLIENTS]; // Array of all connected clients
-client *discon_clients[MAX_CLIENTS]; // Array of all disconnected clients waiting for possible reconnection
-room *rooms[MAX_ROOMS]; // Array of rooms
+client **clients; // Array of all connected clients
+client **discon_clients; // Array of all disconnected clients waiting for possible reconnection
+short *ping_responses; // Array of values indicating if client response to the ping message, 0 = no response, 1 = response received
+room **rooms; // Array of rooms
 struct sockaddr_in my_addr, remote_addr;
+pthread_t ping_th; // thread for testing clients activity
 int server_socket;
 int len_addr, clients_counter = 0, discon_clients_counter = 0, rooms_counter = 0;
 
@@ -99,7 +104,7 @@ int test_nickname(char *nickname, client *player) {
 /* Process CONNECT_OK response from the client.
    Client confirms connection into the game.
 */
-int process_init_ok(char *params, client *player) {
+int process_connect_ok(char *params, client *player) {
     if (params || !player) return ERROR;
 
     player->state = ST_CONNECTED;
@@ -118,17 +123,14 @@ int reconnect_client(client *new_client, client *old_client) {
     new_client->is_player1 = old_client->is_player1;
     new_client->previous_state = old_client->previous_state;
     discon_clients[old_client->id] = NULL;
-    printf("discon clients: %d %p\n", old_client->id, discon_clients[old_client->id]);
     discon_clients_counter--;
     remove_client(old_client);
 
     if (new_client->state == ST_LOBBY) {
-        printf("lobby\n");
         sprintf(resp_buff, get_response(LOGIN_EXIST_LOBBY));
         if (send_message(new_client->socket, TRUE)) return ERROR;
     }
     else { // Client was in the game
-          printf("in game\n");
           if (new_client->room_number == NOT_IN_ROOM) { // If the room is not exist anymore
               sprintf(resp_buff, get_response(LOGIN_ERR_GAME_IS_OVER));
               if (send_message(new_client->socket, TRUE)) return ERROR;
@@ -146,12 +148,10 @@ int reconnect_client(client *new_client, client *old_client) {
               opp = get_opponent(room, new_client);
               if (new_client->state == ST_WAITING_FOR_OPP) {
                   if (opp == NULL) { // Still waiting for the opponent connection
-                      printf("no opponent yet\n");
                       sprintf(resp_buff, get_response(LOGIN_EXIST_WAITING_FREE), room->number);
                       if (send_message(new_client->socket, TRUE)) return ERROR;
                   }
                   else {
-                      printf("some opponent: %s\n", opp->nickname);
                       if (opp->state == ST_DISCONNECTED) { // If opponent also lost connection
                           new_client->state = ST_OPP_LOST_CON;
                           sprintf(resp_buff, get_response(LOGIN_EXIST_WAITING_FULL_NOT_READY), room->number, opp->nickname);
@@ -161,16 +161,13 @@ int reconnect_client(client *new_client, client *old_client) {
                           new_client->state = ST_MY_TURN;
                           sprintf(resp_buff, get_response(LOGIN_EXIST_WAITING_FULL_READY), room->number, opp->nickname);
                           if (send_message(new_client->socket, TRUE)) return ERROR;
-/*
-                          sprintf(resp_buff, get_response(OPP_RECON));
-                          if (send_message(opp->socket, TRUE)) return ERROR;
-*/
                       }
                   }
               }
               else if (new_client->state == ST_OPP_LOST_CON) {
                   if (opp->state == ST_DISCONNECTED) { // Opponent is still disconnected
                       if (new_client->is_player1) {
+
                           sprintf(resp_buff, get_response(LOGIN_EXIST_OPP_LOST_CON_P1_NOT_READY), room->number, opp->nickname, get_state(new_client->previous_state), room->p1_unset_stones, room->p2_unset_stones,
                           game_pos[0], game_pos[1], game_pos[2], game_pos[3], game_pos[4], game_pos[5], game_pos[6], game_pos[7], game_pos[8], game_pos[9], game_pos[10], game_pos[11], game_pos[12], game_pos[13],
                           game_pos[14], game_pos[15], game_pos[16], game_pos[17], game_pos[18], game_pos[19], game_pos[20], game_pos[21], game_pos[22], game_pos[23]);
@@ -291,20 +288,15 @@ int process_login(char *params, client *player) {
 
         for (i = 0; i < MAX_CLIENTS; i++) {
             if (!discon_clients[i]) continue;
-            printf("someone %d nickname:%s\n", i, discon_clients[i]->nickname);
 
             if (strcmp(nickname, discon_clients[i]->nickname) == 0) { // Compare nicknames
-                printf("nicknames");
                 if (strcmp(player->address, discon_clients[i]->address) == 0) { // Compare addresses
-                    printf("found client\n");
                     pthread_cancel(discon_clients[i]->thread_id);
-                    printf("before reconnect\n");
                     if (reconnect_client(player, discon_clients[i]) == ERROR) return ERROR;
                     return NO_ERROR;
                 }
             }
         }
-        printf("no disc clients\n");
         sprintf(resp_buff, get_response(LOGIN_ERR_CLIENT_NOT_FOUND));
         if (send_message(player->socket, TRUE)) return ERROR;
         disconnect_client(player, NOW);
@@ -386,7 +378,6 @@ int process_find(char *params, client *player) {
         if (!rooms[i]) continue;
 
         if (rooms[i]->room_state == FREE) {
-            printf("room: %s\n", rooms[i]->player1->nickname);
             if (join_into_found_room(rooms[i], player)) return ERROR; // Add the client into the found room
             return NO_ERROR;
         }
@@ -555,18 +546,12 @@ int process_leave(char *params, client *player) {
             sprintf(resp_buff, get_response(OPP_LEAVE));
             send_message(get_opponent(rooms[number], player)->socket, TRUE);
         }
-/*        else {
-            opp->room_number = NOT_IN_ROOM;
-        }
-*/
-
     }
     exit_room(player);
 
     sprintf(resp_buff, get_response(LEAVE_OK));
     if (send_message(player->socket, TRUE)) return ERROR;
     player->state = ST_LOBBY;
-//    player->room_number = NOT_IN_ROOM;
     return NO_ERROR;
 }
 
@@ -627,7 +612,6 @@ int process_turn(char *params, client *player) {
                 if (send_message(opp->socket, TRUE)) return ERROR;
                 exit_room(player);
                 player->state = ST_LOBBY;
-        //        player->room_number = NOT_IN_ROOM
                 break;
             case TURN_OK_NOT_MILL_CONT:
                 sprintf(resp_buff, get_response(TURN_OK_NOT_MILL_CONT));
@@ -702,7 +686,6 @@ int process_turn(char *params, client *player) {
               if (send_message(opp->socket, TRUE)) return ERROR;
               exit_room(player);
               player->state = ST_LOBBY;
-    //          player->room_number = NOT_IN_ROOM;
               break;
           case TURN_OK_NOT_MILL_CONT:
               sprintf(resp_buff, get_response(TURN_OK_NOT_MILL_CONT));
@@ -772,7 +755,6 @@ int process_take_stone(char *params, client *player) {
             if (send_message(opp->socket, TRUE)) return ERROR;
             exit_room(player);
             player->state = ST_LOBBY;
-      //      player->room_number = NOT_IN_ROOM;
             break;
         case TK_STONE_ERR_MISSING_STONE:
             sprintf(resp_buff, get_response(TK_STONE_ERR_MISSING_STONE));
@@ -810,7 +792,6 @@ int process_opp_turn_ok(char *params, client *player) {
         if (strcmp(par, "NOT_MILL") == 0) {
             if (strcmp(rest, "LOOSE") == 0) {
                 player->state = ST_LOBBY;
-      //          player->room_number = NOT_IN_ROOM;
             }
             else if (strcmp(rest, "CONTINUE") == 0) {
                 player->state = ST_MY_TURN;
@@ -836,7 +817,6 @@ int process_opp_take_stone_ok(char *params, client *player) {
     }
     else if (strcmp(params, "LOOSE") == 0) {
         player->state = ST_LOBBY;
-//        player->room_number = NOT_IN_ROOM;
     }
     else
         return ERROR;
@@ -848,7 +828,6 @@ int process_opp_take_stone_ok(char *params, client *player) {
 int process_opp_leave_ok(char *params, client *player) {
     if (params || !player) return ERROR;
     player->state = ST_LOBBY;
-//    player->room_number = NOT_IN_ROOM;
 
     return NO_ERROR;
 }
@@ -862,45 +841,99 @@ int process_opp_lost_con_ok(char *params, client *player) {
     return NO_ERROR;
 }
 
+/* Process client response that his opponent reconnect */
 int process_opp_recon_ok(char *params, client *player) {
     if (params || !player) return ERROR;
     player->state = player->previous_state;
     return NO_ERROR;
 }
 
-
+/* Process client response that his opponent disconnect */
 int process_opp_discon_ok(char *params, client *player) {
     if (params || !player) return ERROR;
     exit_room(player);
-//    player->room_number = NOT_IN_ROOM;
     player->state = ST_LOBBY;
     return NO_ERROR;
 }
 
-
+/* Verify the client response to update room in lobby */
 int process_update_room_ok(char *params, client *player) {
-    if (params || !player) return ERROR;
+    if (!params || !player) return ERROR;
     return NO_ERROR;
 }
 
-
+/* Process client response to ping message */
 int process_ping_ok(char *params, client *player) {
+    if (params || !player) return ERROR;
+    ping_responses[player->id] = 1;
     return NO_ERROR;
 }
 
+/* Send all clients PING message to test their connection */
+void *test_clients_connection(void *arg) {
+    int i;
+    client *c, *opp;
 
-/*  Thread function for waiting 30s for possible client reconnection.
-    If client will not recconect then remove client the array of disconnected clients.
+    while (1) {
+        // Send to all clients ping message
+        for (i = 0; i < MAX_CLIENTS; i++) {
+            if (!clients[i]) continue;
+            sprintf(resp_buff, get_response(PING));
+            send_message(clients[i]->socket, TRUE);
+        }
+        sleep(3); // Sleep thread 2s
+
+        for (i = 0; i < MAX_CLIENTS; i++) { // Check response to ping from all clients
+            if (!clients[i]) continue;
+
+            c = clients[i];
+            if (ping_responses[i] == 0) { // No response from the client
+                if (c->ping_attempts >= MAX_PING_ATTEMPTS) { // Reached maximum ping attempts and still no response -> disconnect client (possible manual reconnection)
+                    disconnect_client(c, LATER);
+                }
+                else {
+                    if (c->ping_attempts == 1) {
+                        c->last_state = c->state;
+                        // If client is in a game with some opponent then inform the opponent about the disconnection
+                        if (c->room_number != NOT_IN_ROOM) { // If client is in a room
+                            opp = get_opponent(rooms[c->room_number], c);
+                            if ((opp != NULL) && (opp->state != ST_DISCONNECTED)) {
+                                sprintf(resp_buff, get_response(OPP_LOST_CON));
+                                send_message(opp->socket, TRUE);
+                            }
+                        }
+                    }
+                    c->ping_attempts++;
+                }
+            }
+            else {
+                if (c->ping_attempts > 1) { // If client reconnect
+                    if (c->room_number != NOT_IN_ROOM) {
+                        opp = get_opponent(rooms[c->room_number], c);
+                        if ((opp != NULL) && (opp->state != ST_DISCONNECTED)) {
+                            sprintf(resp_buff, get_response(OPP_RECON));
+                            send_message(opp->socket, TRUE);
+                        }
+                    }
+                }
+                ping_responses[i] = 0;
+                c->ping_attempts = 0;
+            }
+        }
+    }
+}
+
+/*  Thread function for waiting 120s for possible client reconnection.
+    If client will not recconect then remove the client from the array of disconnected clients.
     par arg... disconnected clients
 */
-void *start_countdown(void *arg) {
+void *start_recon_countdown(void *arg) {
     client *c = (client *)arg;
     client *opp;
-    printf("thread is running...\n");
-    sleep(40);
 
-    printf("thread is over\n");
-    // After 30s remove the client
+    sleep(120);
+
+    // After 120s remove the client
     if (c->room_number != NOT_IN_ROOM) { // If client was in the game then inform the opponent about disconnection of his opponent
         opp = get_opponent(rooms[c->room_number], c);
         if ((opp != NULL) && (opp->state != ST_DISCONNECTED)) {
@@ -914,17 +947,19 @@ void *start_countdown(void *arg) {
 }
 
 
-/*  Store the client state for his possible reconnection during next 30s.
+/*  Store the client state for his possible reconnection during next 120s.
     par client... disconnected clients
     return 0 = OK, -1 = ERROR
 */
 int store_disconnected_client(client *player) {
     int i;
+    client *opp;
 
     if (player->room_number != NOT_IN_ROOM) { // If client is in the game
-        if ((player->state != ST_WAITING_FOR_OPP) && (player->state != ST_OPP_LOST_CON)) {  // If client is not waiting for the opponent re/connection, then inform the opponent about disconnection
+        opp = get_opponent(rooms[player->room_number], player);
+        if ((opp != NULL) && (opp->state != ST_DISCONNECTED) && (opp->state != ST_OPP_LOST_CON)) {  // If client is not waiting for the opponent re/connection, then inform the opponent about disconnection
             sprintf(resp_buff, get_response(OPP_LOST_CON));
-            if (send_message(get_opponent(rooms[player->room_number], player)->socket, TRUE)) return ERROR;
+            send_message(opp->socket, TRUE);
         }
     }
 
@@ -933,15 +968,14 @@ int store_disconnected_client(client *player) {
     for (int i = 0; i < MAX_CLIENTS; i++) {
         if (!discon_clients[i]) {
             player->id = i;
-            printf("discon id: %d\n", i);
             discon_clients[i] = player;
             discon_clients_counter++;
             break;
         }
     }
 
-    // Start thread which counting 30s for reconnection
-    if (pthread_create(&(player->thread_id), NULL, (void *)&start_countdown, (void *)player)) {
+    // Start thread which counting 120s for reconnection
+    if (pthread_create(&(player->thread_id), NULL, (void *)&start_recon_countdown, (void *)player)) {
         return ERROR;
     }
 
@@ -961,7 +995,7 @@ void disconnect_client(client *player, int remove) {
     close(player->socket);
     clients[player->id] = NULL;
     clients_counter--;
-    if (remove == LATER) {
+    if ((remove == LATER) && (player->state != ST_INIT) && (player->state != ST_CONNECTED)) {
         store_disconnected_client(player);
     }
     else { // remove client
@@ -991,11 +1025,9 @@ int is_new_client(char *address) {
         if (!discon_clients[i]) continue;
 
         if (strcmp(discon_clients[i]->address, address) == 0) {
-            printf("old client\n");
             return FALSE;
         }
     }
-    printf("new client\n");
     return TRUE;
 }
 
@@ -1010,7 +1042,7 @@ int send_message(int client_socket, int clear_buff) {
         printf("Sending failed.\n");
         return ERROR;
     }
-    printf("Send to(%d): %s", client_socket, resp_buff);
+    printf("Send to (%d): %s", client_socket, resp_buff);
     if (clear_buff == TRUE) {
         memset(resp_buff, 0, sizeof(resp_buff));
     }
@@ -1024,6 +1056,7 @@ int send_message(int client_socket, int clear_buff) {
 int read_message(client *client) {
     message *msg;
     int ret_value;
+    char *part, *next_part;
 
     if (!client) return ERROR;
 
@@ -1031,24 +1064,28 @@ int read_message(client *client) {
     if (recv(client->socket, recv_buff, sizeof(recv_buff), 0) <= 0) {
         return ERROR;
     }
-    printf("Received from(%d): %s", client->socket, recv_buff);
-    msg = parse_msg(recv_buff);
-    if (!msg) return ERROR;
+    printf("Received from %s (%d): %s", client->nickname, client->socket, recv_buff);
 
-//    printf("msg_id: %d\nmsg_name: %s\ndata: %s\n", msg->id, msg->name, msg->params);
+    part = strtok_r(recv_buff, "\n", &next_part);
+    while (part != NULL) {
+        msg = parse_msg(part);
+        if (!msg) return ERROR;
 
-    // If received message is allowed in the current client state
-    if (verify_transition(client->state, msg->id) == ST_INVALID) {
-         printf("Invalid event %s(%d) in the current state %s.\n", msg->name, msg->id, get_state(client->state));
-        return ERROR;
+        // If received message is allowed in the current client state
+        if (verify_transition(client->state, msg->id) == ST_INVALID) {
+             printf("Invalid event %s(%d) in the current state %s.\n", msg->name, msg->id, get_state(client->state));
+            return ERROR;
+        }
+
+        // Process message from the client
+        if (process_func[msg->id](msg->params, client) == ERROR) {
+            printf("Processing message failed.\n");
+            return ERROR;
+        }
+
+        free_message(&msg);
+        part = strtok_r(next_part, "\n", &next_part);
     }
-
-    // Process message from the client
-    if (process_func[msg->id](msg->params, client) == ERROR) {
-        printf("Processing message failed.\n");
-        return ERROR;
-    }
-    free_message(&msg);
 
     return NO_ERROR;
 }
@@ -1087,6 +1124,11 @@ int create_server(int port) {
     }
 
     printf("Server is running...\n");
+    if (pthread_create(&ping_th, NULL, (void *)&test_clients_connection, NULL)) {
+        printf("Creating thread for ping failed.\n");
+        return ERROR;
+    }
+
     len_addr = sizeof(remote_addr);
 
     while (1) {
@@ -1106,8 +1148,7 @@ int create_server(int port) {
 
         // Waiting for some activity on some socket
         if (select(max_sd + 1, &read_fds, NULL, NULL, NULL) < 0) {
-            printf("Select failed.\n");
-            return ERROR;
+            break;
         }
 
         if (FD_ISSET(server_socket, &read_fds)) {
@@ -1155,12 +1196,8 @@ int create_server(int port) {
                     }
                 }
                 else {  // Problems with the client socket - store the client state for a possible future reconnection, if he is not in state INIT or CONNECTED
-                    if (clients[i]->state == ST_INIT || clients[i]->state == ST_CONNECTED) {
-                        disconnect_client(clients[i], NOW);
-                    }
-                    else {
-                        disconnect_client(clients[i], LATER);
-                    }
+                    printf("No bytes to read\n");
+                    disconnect_client(clients[i], NOW);
                 }
             }
         }
@@ -1169,16 +1206,45 @@ int create_server(int port) {
     return NO_ERROR;
 }
 
+// Free all allocated memory
+void exit_handler() {
+    int i;
+    printf("\nServer is shut down.\n");
+    if (clients) {
+        for (i = 0; i < MAX_CLIENTS; i++) {
+            if (!clients[i]) continue;
+            remove_client(clients[i]);
+        }
+      free(clients);
+    }
+    if (discon_clients) {
+        for (i = 0; i < MAX_CLIENTS; i++) {
+            if (!discon_clients[i]) continue;
+            remove_client(discon_clients[i]);
+        }
+        free(discon_clients);
+    }
+    if (rooms) {
+        for (i = 0; i < MAX_ROOMS; i++) {
+            if (!rooms[i]) continue;
+            remove_room(rooms[i]);
+        }
+        free(rooms);
+    }
+    if (ping_responses) free(ping_responses);
+
+}
+
 /* The main function of the program
    par argc... count of arguments
-   par argv... array of command line arguments, argv[1] = port number
+   par argv... array of command line arguments
 */
 int main(int argc, char *argv[]) {
     int port;
     char *rest;
 
-    if (argc < 2) {
-        printf("Missing argument.\nUsage: server [port]\nport: <0 - 65536>\n");
+    if (argc < 4) {
+        printf("Missing arguments.\nUsage: server [port] [number of clients] [number of rooms]\nport: <0 - 65536>\nnumber of clients: <2 - 128>\nnumber of rooms: <1 - 64>\n");
         return EXIT_FAILURE;
     }
 
@@ -1187,6 +1253,31 @@ int main(int argc, char *argv[]) {
         printf("Invalid port.\nport: <0 - 65536>\n");
         return EXIT_FAILURE;
     }
+
+    MAX_CLIENTS = strtol(argv[2], &rest, 10);
+    if (*rest != '\0' || MAX_CLIENTS < 2 || MAX_CLIENTS > 128) {  // Valid number of clients
+        printf("Invalid number of clients.\nnumber of clients: <2 - 128>\n");
+        return EXIT_FAILURE;
+    }
+
+    MAX_ROOMS = strtol(argv[3], &rest, 10);
+    if (*rest != '\0' || MAX_ROOMS < 1 || MAX_ROOMS > 64) {  // Valid number of rooms
+        printf("Invalid number of rooms.\nnumber of rooms: <1 - 64>\n");
+        return EXIT_FAILURE;
+    }
+
+    // Catch SIGINT signal
+    signal(SIGINT, exit_handler);
+
+    // Create all needed arrays
+    clients = calloc(MAX_CLIENTS, sizeof(client*));
+    if (!clients) return EXIT_FAILURE;
+    rooms = calloc(sizeof(room*), MAX_ROOMS);
+    if (!rooms) return EXIT_FAILURE;
+    discon_clients = calloc(sizeof(client*), MAX_CLIENTS);
+    if (!discon_clients) return EXIT_FAILURE;
+    ping_responses = calloc(sizeof(short), MAX_CLIENTS);
+    if (!ping_responses) return EXIT_FAILURE;
 
     if (create_server(port) == ERROR) {
         printf("Some problems occured.\n");

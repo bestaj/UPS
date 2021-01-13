@@ -57,7 +57,7 @@ room *create_room(int number, client *player1) {
 
     if (number < 0 || !player1) return NULL;
 
-    new_room = (room *) malloc(sizeof(room));
+    new_room = (room *) calloc(1, sizeof(room));
     if (!new_room) return NULL;
 
     new_room->number = number;
@@ -81,7 +81,7 @@ void remove_room(room *room) {
     room = NULL;
 }
 
-/* Return the opponent */
+/* Return the opponent of the player */
 client *get_opponent(room *room, client *player) {
     if (player->is_player1)
         return room->player2;
@@ -172,7 +172,7 @@ int is_mill(int *game_positions, int pos_id, int player_stone) {
     return FALSE;
 }
 
-
+/* Test if opponent can make any turn */
 int exist_any_possible_opp_move(int *game_positions, client *player) {
     int i, j, opponent;
     if (player->is_player1) {
@@ -185,7 +185,7 @@ int exist_any_possible_opp_move(int *game_positions, client *player) {
     for (i = 0; i < POSITIONS_COUNT; i++) {
         if (game_positions[i] == opponent) {
             for (j = 0; j < nbrs_counts[i]; j++) {
-                if (game_positions[neighbours[i][j]] == FREE) {
+                if (game_positions[neighbours[i][j]] == FREE) { // Test if at least one neighbour of the position is free
                     return TRUE;
                 }
             }

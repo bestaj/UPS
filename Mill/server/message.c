@@ -7,7 +7,7 @@
 char *responses[] = {
     [UNKNOWN_MSG] = "UNKNOWN_MESSAGE;ERR;400\n",
     [INIT_OK] = "CONNECT;OK;0;Welcome in the game Mill.\n",
-    [INIT_ERR] = "CONNECT;ERR;1;Server is full.\n",
+    [INIT_ERR] = "CONNECT;ERR;401;Server is full.\n",
 
     [LOGIN_NEW_OK] = "LOGIN_REPLY;OK;0\n",
     [LOGIN_EXIST_LOBBY] = "LOGIN_REPLY;OK;1;LOBBY\n",
@@ -19,24 +19,6 @@ char *responses[] = {
     [LOGIN_EXIST_ACTIVE_STATE_P1_NOT_READY] = "LOGIN_REPLY;OK;1;%s;%d;P1;%s;OPP_LOST_CON;%d;%d;0_%d;1_%d;2_%d;3_%d;4_%d;5_%d;6_%d;7_%d;8_%d;9_%d;10_%d;11_%d;12_%d;13_%d;14_%d;15_%d;16_%d;17_%d;18_%d;19_%d;20_%d;21_%d;22_%d;23_%d\n",
     [LOGIN_EXIST_ACTIVE_STATE_P2_READY] = "LOGIN_REPLY;OK;1;%s;%d;P2;%s;OPP_READY;%d;%d;0_%d;1_%d;2_%d;3_%d;4_%d;5_%d;6_%d;7_%d;8_%d;9_%d;10_%d;11_%d;12_%d;13_%d;14_%d;15_%d;16_%d;17_%d;18_%d;19_%d;20_%d;21_%d;22_%d;23_%d\n",
     [LOGIN_EXIST_ACTIVE_STATE_P2_NOT_READY] = "LOGIN_REPLY;OK;1;%s;%d;P2;%s;OPP_LOST_CON;%d;%d;0_%d;1_%d;2_%d;3_%d;4_%d;5_%d;6_%d;7_%d;8_%d;9_%d;10_%d;11_%d;12_%d;13_%d;14_%d;15_%d;16_%d;17_%d;18_%d;19_%d;20_%d;21_%d;22_%d;23_%d\n",
-    /*
-    [LOGIN_EXIST_MY_TURN_P1_READY] = "LOGIN_REPLY;OK;1;MY_TURN;%d;P1;%s;OPP_READY;%d;%d;0_%d;1_%d;2_%d;3_%d;4_%d;5_%d;6_%d;7_%d;8_%d;9_%d;10_%d;11_%d;12_%d;13_%d;14_%d;15_%d;16_%d;17_%d;18_%d;19_%d;20_%d;21_%d;22_%d;23_%d\n",
-    [LOGIN_EXIST_MY_TURN_P1_NOT_READY] = "LOGIN_REPLY;OK;1;MY_TURN;%d;P1;%s;OPP_LOST_CON;%d;%d;0_%d;1_%d;2_%d;3_%d;4_%d;5_%d;6_%d;7_%d;8_%d;9_%d;10_%d;11_%d;12_%d;13_%d;14_%d;15_%d;16_%d;17_%d;18_%d;19_%d;20_%d;21_%d;22_%d;23_%d\n",
-    [LOGIN_EXIST_MY_TURN_P2_READY] = "LOGIN_REPLY;OK;1;MY_TURN;%d;P2;%s;OPP_READY;%d;%d;0_%d;1_%d;2_%d;3_%d;4_%d;5_%d;6_%d;7_%d;8_%d;9_%d;10_%d;11_%d;12_%d;13_%d;14_%d;15_%d;16_%d;17_%d;18_%d;19_%d;20_%d;21_%d;22_%d;23_%d\n",
-    [LOGIN_EXIST_MY_TURN_P2_NOT_READY] = "LOGIN_REPLY;OK;1;MY_TURN;%d;P2;%s;OPP_LOST_CON;%d;%d;0_%d;1_%d;2_%d;3_%d;4_%d;5_%d;6_%d;7_%d;8_%d;9_%d;10_%d;11_%d;12_%d;13_%d;14_%d;15_%d;16_%d;17_%d;18_%d;19_%d;20_%d;21_%d;22_%d;23_%d\n",
-    [LOGIN_EXIST_OPP_TURN_P1_READY] = "LOGIN_REPLY;OK;1;OPP_TURN;%d;P1;%s;OPP_READY;%d;%d;0_%d;1_%d;2_%d;3_%d;4_%d;5_%d;6_%d;7_%d;8_%d;9_%d;10_%d;11_%d;12_%d;13_%d;14_%d;15_%d;16_%d;17_%d;18_%d;19_%d;20_%d;21_%d;22_%d;23_%d\n",
-    [LOGIN_EXIST_OPP_TURN_P1_NOT_READY] = "LOGIN_REPLY;OK;1;OPP_TURN;%d;P1;%s;OPP_LOST_CON;%d;%d;0_%d;1_%d;2_%d;3_%d;4_%d;5_%d;6_%d;7_%d;8_%d;9_%d;10_%d;11_%d;12_%d;13_%d;14_%d;15_%d;16_%d;17_%d;18_%d;19_%d;20_%d;21_%d;22_%d;23_%d\n",
-    [LOGIN_EXIST_OPP_TURN_P2_READY] = "LOGIN_REPLY;OK;1;OPP_TURN;%d;P2;%s;OPP_READY;%d;%d;0_%d;1_%d;2_%d;3_%d;4_%d;5_%d;6_%d;7_%d;8_%d;9_%d;10_%d;11_%d;12_%d;13_%d;14_%d;15_%d;16_%d;17_%d;18_%d;19_%d;20_%d;21_%d;22_%d;23_%d\n",
-    [LOGIN_EXIST_OPP_TURN_P2_NOT_READY] = "LOGIN_REPLY;OK;1;OPP_TURN;%d;P2;%s;OPP_LOST_CON;%d;%d;0_%d;1_%d;2_%d;3_%d;4_%d;5_%d;6_%d;7_%d;8_%d;9_%d;10_%d;11_%d;12_%d;13_%d;14_%d;15_%d;16_%d;17_%d;18_%d;19_%d;20_%d;21_%d;22_%d;23_%d\n",
-    [LOGIN_EXIST_TAKING_P1_READY] = "LOGIN_REPLY;OK;1;TAKING_STONE;%d;P1;%s;OPP_READY;%d;%d;0_%d;1_%d;2_%d;3_%d;4_%d;5_%d;6_%d;7_%d;8_%d;9_%d;10_%d;11_%d;12_%d;13_%d;14_%d;15_%d;16_%d;17_%d;18_%d;19_%d;20_%d;21_%d;22_%d;23_%d\n",
-    [LOGIN_EXIST_TAKING_P1_NOT_READY] = "LOGIN_REPLY;OK;1;TAKING_STONE;%d;P1;%s;OPP_LOST_CON;%d;%d;0_%d;1_%d;2_%d;3_%d;4_%d;5_%d;6_%d;7_%d;8_%d;9_%d;10_%d;11_%d;12_%d;13_%d;14_%d;15_%d;16_%d;17_%d;18_%d;19_%d;20_%d;21_%d;22_%d;23_%d\n",
-    [LOGIN_EXIST_TAKING_P2_READY] = "LOGIN_REPLY;OK;1;TAKING_STONE;%d;P2;%s;OPP_READY;%d;%d;0_%d;1_%d;2_%d;3_%d;4_%d;5_%d;6_%d;7_%d;8_%d;9_%d;10_%d;11_%d;12_%d;13_%d;14_%d;15_%d;16_%d;17_%d;18_%d;19_%d;20_%d;21_%d;22_%d;23_%d\n",
-    [LOGIN_EXIST_TAKING_P2_NOT_READY] = "LOGIN_REPLY;OK;1;TAKING_STONE;%d;P2;%s;OPP_LOST_CON;%d;%d;0_%d;1_%d;2_%d;3_%d;4_%d;5_%d;6_%d;7_%d;8_%d;9_%d;10_%d;11_%d;12_%d;13_%d;14_%d;15_%d;16_%d;17_%d;18_%d;19_%d;20_%d;21_%d;22_%d;23_%d\n",
-    [LOGIN_EXIST_OPP_TAKING_P1_READY] = "LOGIN_REPLY;OK;1;OPP_TAKING_STONE;%d;P1;%s;OPP_READY;%d;%d;0_%d;1_%d;2_%d;3_%d;4_%d;5_%d;6_%d;7_%d;8_%d;9_%d;10_%d;11_%d;12_%d;13_%d;14_%d;15_%d;16_%d;17_%d;18_%d;19_%d;20_%d;21_%d;22_%d;23_%d\n",
-    [LOGIN_EXIST_OPP_TAKING_P1_NOT_READY] = "LOGIN_REPLY;OK;1;OPP_TAKING_STONE;%d;P1;%s;OPP_LOST_CON;%d;%d;0_%d;1_%d;2_%d;3_%d;4_%d;5_%d;6_%d;7_%d;8_%d;9_%d;10_%d;11_%d;12_%d;13_%d;14_%d;15_%d;16_%d;17_%d;18_%d;19_%d;20_%d;21_%d;22_%d;23_%d\n",
-    [LOGIN_EXIST_OPP_TAKING_P2_READY] = "LOGIN_REPLY;OK;1;OPP_TAKING_STONE;%d;P2;%s;OPP_READY;%d;%d;0_%d;1_%d;2_%d;3_%d;4_%d;5_%d;6_%d;7_%d;8_%d;9_%d;10_%d;11_%d;12_%d;13_%d;14_%d;15_%d;16_%d;17_%d;18_%d;19_%d;20_%d;21_%d;22_%d;23_%d\n",
-    [LOGIN_EXIST_OPP_TAKING_P2_NOT_READY] = "LOGIN_REPLY;OK;1;OPP_TAKING_STONE;%d;P2;%s;OPP_LOST_CON;%d;%d;0_%d;1_%d;2_%d;3_%d;4_%d;5_%d;6_%d;7_%d;8_%d;9_%d;10_%d;11_%d;12_%d;13_%d;14_%d;15_%d;16_%d;17_%d;18_%d;19_%d;20_%d;21_%d;22_%d;23_%d\n",
-*/
     [LOGIN_EXIST_OPP_LOST_CON_P1_READY] = "LOGIN_REPLY;OK;1;OPP_LOST_CON;%d;P1;%s;OPP_READY;%s;%d;%d;0_%d;1_%d;2_%d;3_%d;4_%d;5_%d;6_%d;7_%d;8_%d;9_%d;10_%d;11_%d;12_%d;13_%d;14_%d;15_%d;16_%d;17_%d;18_%d;19_%d;20_%d;21_%d;22_%d;23_%d\n",
     [LOGIN_EXIST_OPP_LOST_CON_P1_NOT_READY] = "LOGIN_REPLY;OK;1;OPP_LOST_CON;%d;P1;%s;OPP_LOST_CON;%s;%d;%d;0_%d;1_%d;2_%d;3_%d;4_%d;5_%d;6_%d;7_%d;8_%d;9_%d;10_%d;11_%d;12_%d;13_%d;14_%d;15_%d;16_%d;17_%d;18_%d;19_%d;20_%d;21_%d;22_%d;23_%d\n",
     [LOGIN_EXIST_OPP_LOST_CON_P2_READY] = "LOGIN_REPLY;OK;1;OPP_LOST_CON;%d;P2;%s;OPP_READY;%s;%d;%d;0_%d;1_%d;2_%d;3_%d;4_%d;5_%d;6_%d;7_%d;8_%d;9_%d;10_%d;11_%d;12_%d;13_%d;14_%d;15_%d;16_%d;17_%d;18_%d;19_%d;20_%d;21_%d;22_%d;23_%d\n",
@@ -111,29 +93,30 @@ char *responses[] = {
   Index to the array response to ID of the message
 */
 char *list_of_messages[] = {
-    "LOGIN", // 0
-    "ROOMS", // 1
-    "FIND", // 2
-    "CREATE", // 3
-    "JOIN", // 4
-    "LOGOUT", // 5
-    "LEAVE", // 6
-    "TURN", // 7
-    "TAKE_STONE", // 8
-    "OPP_CON_OK", // 9
-    "OPP_TURN_OK", // 10
-    "OPP_TAKE_STONE_OK", // 11
-    "OPP_LEAVE_OK", // 12
-    "OPP_LOST_CON_OK", // 13
-    "OPP_RECON_OK", // 14
-    "OPP_DISCON_OK", // 15
-    "UPDATE_ROOM_OK", // 16
-    "PING_OK", // 17
-    "CONNECT_OK" // 18
+    "CONNECT_OK", // 0
+    "LOGIN", // 1
+    "ROOMS", // 2
+    "FIND", // 3
+    "CREATE", // 4
+    "JOIN", // 5
+    "LOGOUT", // 6
+    "LEAVE", // 7
+    "TURN", // 8
+    "TAKE_STONE", // 9
+    "OPP_CON_OK", // 10
+    "OPP_TURN_OK", // 11
+    "OPP_TAKE_STONE_OK", // 12
+    "OPP_LEAVE_OK", // 13
+    "OPP_LOST_CON_OK", // 14
+    "OPP_RECON_OK", // 15
+    "OPP_DISCON_OK", // 16
+    "UPDATE_ROOM_OK", // 17
+    "PING_OK" // 18
 };
 
 // if semicolon should be after message name in message from the client, 1 = true, 0 = false
 short semicolon_after_msg_name[] = {
+  0, // CONNECT_OK
   1, // LOGIN
   0, // ROOOMS
   0, // FIND
@@ -151,8 +134,7 @@ short semicolon_after_msg_name[] = {
   0, // OPP_RECON_OK
   0, // OPP_DISCON_OK
   1, // UPDATE_ROOM_OK
-  0, // PING_OK
-  0  // CONNECT_OK
+  0 // PING_OK
 };
 
 /* Return the particular response */
@@ -172,7 +154,6 @@ message *parse_msg(char *data) {
 
     // Convert msg_id on number
     id = strtol(part, &rest, 10);
-      // pridat overeni na maximalni hodnotu msg_id
     if (*rest != '\0' || id < 0 || id > 19) {
         printf("Invalid msg_id\n");
         return NULL;

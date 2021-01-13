@@ -9,6 +9,7 @@
 #define P1 1
 #define P2 2
 
+/* Structure of the room/game */
 typedef struct theroom{
     int number;
     int room_state;

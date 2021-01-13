@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include "client.h"
 
 /* Array of all possible transitions
@@ -25,7 +26,7 @@ state transitions[STATES_COUNT][EVENTS_COUNT] = {
   [ST_INIT][EV_OPP_RECON_OK] = ST_INVALID,
   [ST_INIT][EV_OPP_DISCON_OK] = ST_INVALID,
   [ST_INIT][EV_UPDATE_ROOM_OK] = ST_INVALID,
-  [ST_INIT][EV_PING_OK] = ST_INVALID,
+  [ST_INIT][EV_PING_OK] = ST_INIT,
 
   [ST_CONNECTED][EV_CONNECT_OK] = ST_INVALID,
   [ST_CONNECTED][EV_LOGIN] = ST_LOBBY,
@@ -186,23 +187,44 @@ state transitions[STATES_COUNT][EVENTS_COUNT] = {
   [ST_OPP_LOST_CON][EV_OPP_DISCON_OK] = ST_LOBBY,
   [ST_OPP_LOST_CON][EV_UPDATE_ROOM_OK] = ST_INVALID,
   [ST_OPP_LOST_CON][EV_PING_OK] = ST_OPP_LOST_CON,
+
+  [ST_DISCONNECTED][EV_CONNECT_OK] = ST_INVALID,
+  [ST_DISCONNECTED][EV_LOGIN] = ST_INVALID,
+  [ST_DISCONNECTED][EV_ROOMS] = ST_INVALID,
+  [ST_DISCONNECTED][EV_FIND] = ST_INVALID,
+  [ST_DISCONNECTED][EV_CREATE] = ST_INVALID,
+  [ST_DISCONNECTED][EV_JOIN] = ST_INVALID,
+  [ST_DISCONNECTED][EV_LOGOUT] = ST_INVALID,
+  [ST_DISCONNECTED][EV_LEAVE] = ST_INVALID,
+  [ST_DISCONNECTED][EV_TURN] = ST_INVALID,
+  [ST_DISCONNECTED][EV_TAKE_STONE] = ST_INVALID,
+  [ST_DISCONNECTED][EV_OPP_CON_OK] = ST_INVALID,
+  [ST_DISCONNECTED][EV_OPP_TURN_OK] = ST_INVALID,
+  [ST_DISCONNECTED][EV_OPP_TAKE_STONE_OK] = ST_INVALID,
+  [ST_DISCONNECTED][EV_OPP_LEAVE_OK] = ST_INVALID,
+  [ST_DISCONNECTED][EV_OPP_LOST_CON_OK] = ST_INVALID,
+  [ST_DISCONNECTED][EV_OPP_RECON_OK] = ST_INVALID,
+  [ST_DISCONNECTED][EV_OPP_DISCON_OK] = ST_INVALID,
+  [ST_DISCONNECTED][EV_UPDATE_ROOM_OK] = ST_INVALID,
+  [ST_DISCONNECTED][EV_PING_OK] = ST_UNKNOWN,
 };
 
 char *state_str[] = {
-  [ST_INIT] = "ST_INIT",
-  [ST_INVALID] = "ST_INVALID",
-  [ST_CONNECTED] = "ST_CONNECTED",
-  [ST_DISCONNECTED] = "ST_DISCONNECTED",
-  [ST_LOBBY] = "ST_LOBBY",
-  [ST_WAITING_FOR_OPP] = "ST_WAITING_FOR_OPP",
-  [ST_MY_TURN] = "ST_MY_TURN",
-  [ST_OPP_TURN] = "ST_OPP_TURN",
-  [ST_TAKING_STONE] = "ST_TAKING_STONE",
-  [ST_OPP_TAKING_STONE] = "ST_OPP_TAKING_STONE",
-  [ST_OPP_LOST_CON] = "ST_OPP_LOST_CON",
-  [ST_UNKNOWN] = "ST_UNKNOWN"
+  [ST_INIT] = "INIT",
+  [ST_INVALID] = "INVALID",
+  [ST_CONNECTED] = "CONNECTED",
+  [ST_DISCONNECTED] = "DISCONNECTED",
+  [ST_LOBBY] = "LOBBY",
+  [ST_WAITING_FOR_OPP] = "WAITING_FOR_OPP",
+  [ST_MY_TURN] = "MY_TURN",
+  [ST_OPP_TURN] = "OPP_TURN",
+  [ST_TAKING_STONE] = "TAKING_STONE",
+  [ST_OPP_TAKING_STONE] = "OPP_TAKING_STONE",
+  [ST_OPP_LOST_CON] = "OPP_LOST_CON",
+  [ST_UNKNOWN] = "UNKNOWN"
 };
 
+/* Return a state as a text */
 char *get_state(state state) {
     return state_str[state];
 }
@@ -215,10 +237,9 @@ int verify_transition(state state, int event_id) {
 /* Create a new client */
 client *create_client(char *address, int socket, int id) {
     client *new_client;
-
     if (!address || socket < 0 || id < 0) return NULL;
 
-    new_client = (client *) malloc(sizeof(client));
+    new_client = (client *) calloc(1, sizeof(client));
     if (!new_client) return NULL;
 
     strncpy(new_client->address, address, strlen(address));
@@ -226,12 +247,14 @@ client *create_client(char *address, int socket, int id) {
     new_client->id = id;
     new_client->room_number = NOT_IN_ROOM;
     new_client->state = ST_INIT;
+    new_client->ping_attempts = 0;
 
     return new_client;
 }
 
 /* Clear the client */
 void remove_client(client *client) {
-    if (client) free(client);
+    if (client) free(client);;
+
     client = NULL;
 }
